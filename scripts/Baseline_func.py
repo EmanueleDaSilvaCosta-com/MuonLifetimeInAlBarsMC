@@ -1,10 +1,9 @@
 import os
-import glob
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.optimize import curve_fit
 
-from Function import Histogram, gaussian, linear
+from Function import Histogram, gaussian, linear, constant
 
 def Read_Plot_Histo(file_list, output_dr):
     os.makedirs(output_dr, exist_ok=True)
@@ -22,7 +21,27 @@ def Read_Plot_Histo(file_list, output_dr):
         plt.savefig(saving_path)
         plt.close(fig)
 
-def Baseline(file_list, out_dir, ch_min=None, ch_max=None, i=0):
+def Mean(out_dir, no_spectra, ch_min=None, ch_max=None):
+    mean = []
+    std = []
+    for i in range(no_spectra):
+        spectrum = np.fromfile(out_dir / f"spectrum{i}.bin", dtype="<u4").astype(np.float64)
+        canali = np.arange(len(spectrum))
+        if (ch_min!=None and ch_max!=None):
+            mask = (canali >= ch_min) & (canali <= ch_max)
+            canali_roi = canali[mask]
+            data_roi = spectrum[mask]
+        else:
+            canali_roi=canali
+            data_roi=spectrum
+        b=np.sum(data_roi)/len(data_roi)
+        s=np.std(data_roi)/np.sqrt(len(data_roi))
+        mean.append(b)
+        std.append(s)
+        
+    return np.array(mean), np.array(std)
+
+def Baseline(file_list, out_dir, ch_min=None, ch_max=None, i=0, mean=1):
     B=[]
     err_B=[]
     for path in file_list:
@@ -36,45 +55,62 @@ def Baseline(file_list, out_dir, ch_min=None, ch_max=None, i=0):
             canali_roi=canali
             data_roi=data
 
-        popt, pcov = curve_fit(linear, canali_roi, data_roi, p0=[0,1000])
+        ydata_err = np.sqrt(data_roi)
+        ydata_err[ydata_err == 0] = 1.0
+        popt, pcov = curve_fit(constant, canali_roi, data_roi, p0=[mean], sigma=ydata_err, absolute_sigma=True)
+        B.append(popt[0])
+        err = np.sqrt(pcov[0,0])
+        err_B.append(err)
+        
+        '''popt, pcov = curve_fit(linear, canali_roi, data_roi, p0=[0,1000])
 
         B.append(popt[1])
         err = np.sqrt(pcov[1,1])
         err_B.append(err)
+        '''
         if path==str(out_dir / f"spectrum{i}.bin"):
-            q=popt[1]
-            err_q=np.sqrt(pcov[1,1])
-            m=popt[0]
-            err_m=np.sqrt(pcov[0,0])
-
+            q=popt[0]
+            err_q=np.sqrt(pcov[0,0])
+            #m=popt[0]
+            #err_m=np.sqrt(pcov[0,0])
     
     print(f"For the spectrum {i}, the calculated values are:", 
-          f"\nB = {q:.4f} ± {err_q:.4f}", 
-          f"\nm (angular coeff.) = {m:.4f} ± {err_m:.4f}")
+          f"\nB = {q:.4f} ± {err_q:.4f}")
 
-    bins = np.arange(len(canali_roi)) + 0.5
+    bins = np.arange(len(canali)) + 0.5
     spectrum = np.fromfile(out_dir / f"spectrum{i}.bin", dtype="<u4")
+    #spectrum=spectrum[mask]
     plt.bar(bins, spectrum, width=1.0)
-    plt.plot(bins, q+bins*m, color="Red")
+    plt.plot(bins, q*np.ones_like(bins), color="Red")
     plt.show()
 
     return np.array(B), np.array(err_B)
 
-def Distribution(file_list, output_dr, save=False):
+def Distribution(file_list, output_dr, ch_min=None, ch_max=None, save=False):
     B = []
     err_B = []
 
     for path in file_list:
-        data = np.fromfile(path, dtype=np.int32) 
+        data = np.fromfile(path, dtype="<u4") #np.fromfile(path, dtype=np.int32) 
         valid_data = data[np.isfinite(data)]
-    
-        if len(valid_data) > 0:
-            isto = Histogram(valid_data, bins=50)
+        canali=np.arange(len(valid_data))
+
+        if (ch_min!=None and ch_max!=None):
+            mask = (canali >= ch_min) & (canali <= ch_max)
+            canali_roi = canali[mask]
+            data_roi = valid_data[mask]
+        else:
+            canali_roi=canali
+            data_roi=valid_data
+
+        if len(data_roi) > 0:
+            isto = Histogram(data_roi, bins=50)
         
             try:
                 par, cov = isto.fit("gaussian")
                 B.append(par[1])
                 err=np.sqrt(cov[1,1])
+                #err=par[2]
                 err_B.append(abs(err))
             
             except RuntimeError:
@@ -113,7 +149,7 @@ def Distribution(file_list, output_dr, save=False):
 
     return par_mu, par_sigma, np.array(B), np.array(err_B)
 
-def pull(B, dev, B_true, output_dr ,show=False, save=False):
+def pull(B, dev, B_true, output_dr , fit, show=False, save=False):
     pull = (B - B_true) / dev
 
     fig, ax = plt.subplots(1, 1, figsize=(8,4))
@@ -126,9 +162,9 @@ def pull(B, dev, B_true, output_dr ,show=False, save=False):
     print(f"The average value (pull) is {par_pull[1]:.4f} ± {err_pull:.4f}")
     print(f"The standard dev. (pull) is {abs(par_pull[2]):.4f} ± {err_dev_pull:.4f}")
 
-    isto_pull.plot(ax=ax ,title=f"Pull Distribution for B_true={B_true}", label="Pull")
+    isto_pull.plot(ax=ax ,title=f"Pull Distribution for B_true={B_true} [Method {fit}]", label="Pull")
     if save:
-        plt.savefig(str(output_dr /f"Pull_Plot_{B_true}.pdf"), dpi=300)
+        plt.savefig(str(output_dr /f"Pull_Plot_{B_true}_Method_{fit}.pdf"), dpi=300)
     if show and (par_pull[1]>-3 and par_pull[1]<3):
         plt.show()
     else:

@@ -9,6 +9,9 @@ color = graf.get_colors()
 # ==========================================
 # FUNZIONI MATEMATICHE E STATISTICHE
 # ==========================================
+def constant(x, B):
+    return B * np.ones_like(x)
+
 def exponential(x, A, B):
     return A * np.exp(B * x)
 
@@ -31,6 +34,7 @@ def chi2(function, xdata, ydata, sigma):
     return np.sum(((ydata - function(xdata)) / sigma) ** 2)
 
 REGISTRO_FUNZIONI = {
+    'constant': constant,
     'linear': linear,
     'exponential': exponential,
     'power_law': power_law,
@@ -82,10 +86,16 @@ class Histogram:
         x_roi = self.bin_centers[mask]
         y_roi = self.bin_values[mask]
 
+        if len(y_roi) == 0:
+            raise RuntimeError("ROI vuota, impossibile fittare.")
+            
+        y_err = np.sqrt(y_roi)
+        y_err[y_err == 0] = 1.0 
+
         if p0 is None and func_name == 'gaussian':
             p0 = [np.max(y_roi), np.mean(x_roi), np.std(x_roi)]
 
-        self.popt, self.pcov = curve_fit(modello, x_roi, y_roi, p0=p0)
+        self.popt, self.pcov = curve_fit(modello, x_roi, y_roi, p0=p0, sigma=y_err, absolute_sigma=True)
         return self.popt, self.pcov
 
     def plot(self, ax=None, label=None, show_fit=True, title="Istogramma"):

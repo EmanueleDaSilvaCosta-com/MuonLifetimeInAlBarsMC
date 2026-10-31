@@ -109,8 +109,8 @@ def Distribution(file_list, output_dr, ch_min=None, ch_max=None, save=False):
             try:
                 par, cov = isto.fit("gaussian")
                 B.append(par[1])
-                err=np.sqrt(cov[1,1])
-                #err=par[2]
+                #err=np.sqrt(cov[1,1])
+                err=par[2]
                 err_B.append(abs(err))
             
             except RuntimeError:

@@ -35,24 +35,10 @@ else:
         print(f"Output directory '{out_dir}' does not exist. Run the C++ executable first to generate the spectra.")
         raise SystemExit(0) # Ends the program if the output directory does not exist
 
-'''mean = []
-std = []
-for i in range(no_spectra):
-    spectrum = np.fromfile(out_dir / f"spectrum{i}.bin", dtype="<u4").astype(np.float64)
-    mean.append(np.sum(spectrum[0:1023])/2048)
-    std.append(np.std(spectrum[0:1023]))
-print(mean)
-pull = (np.array(mean) - 500)/np.array(std)
-print(pull)
-plt.hist(pull, bins=10)
-plt.show()
-plt.clf()
-sys.exit()'''
-
 print("--- FIT ANALYSIS ---")
 
 #PARAMETRI DA CAMBIARE
-ch_min=0
+ch_min=1024
 ch_max=2048
 save_gauss=True
 save_pull=True
